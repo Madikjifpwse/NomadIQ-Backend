@@ -52,4 +52,4 @@ class VisitedPlaceStats(BaseModel):
     total_visited: int
     average_rating: Optional[float]
     most_common_category: Optional[str]
-    most_common_tags: list[str] = []
+    most_common_tags: list[str] = Field(default_factory=list)

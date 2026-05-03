@@ -3,10 +3,9 @@ from sqlalchemy import engine_from_config
 from sqlalchemy import pool
 from alembic import context
 
-# Import your models' Base and config
 from app.database import Base
 from app.config import settings
-import app.models  # This imports all models
+import app.models  
 
 config = context.config
 if config.config_file_name is not None:

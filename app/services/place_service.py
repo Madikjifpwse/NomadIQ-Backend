@@ -3,6 +3,7 @@ from fastapi import HTTPException, status
 from typing import List, Optional
 from uuid import UUID
 
+from app.models import Place
 from app.models.user import ExperienceLevel
 from app.repositories.place_repository import PlaceRepository
 from app.repositories.visited_repository import VisitedPlaceRepository
@@ -53,40 +54,40 @@ class PlaceService:
 
         return place_response
 
-    def search_places(self, filters: PlaceSearchFilters, user_id: Optional[UUID] = None) -> PlaceListResponse:
-        exclude_visited = filters.exclude_visited and user_id is not None
-        places, total = self.place_repo.search(
-            experience_level=filters.experience_level,
-            category=filters.category,
-            tags=filters.tags,
-            user_id=user_id,
-            exclude_visited=exclude_visited,
-            latitude=filters.latitude,
-            longitude=filters.longitude,
-            radius_km=filters.radius_km,
-            limit=filters.limit,
-            offset=filters.offset
-        )
+    def search_places(self, filters: PlaceSearchFilters, user_id: Optional[UUID] = None):
+        query = self.db.query(Place)
+
+        if filters.category:
+            query = query.filter(Place.category == filters.category)
+
+        if filters.experience_level:
+            if filters.experience_level == "first_timer" or filters.experience_level == ExperienceLevel.FIRST_TIMER:
+                query = query.filter(Place.popularity_score >= 60)
+            elif filters.experience_level == "advanced" or filters.experience_level == ExperienceLevel.ADVANCED:
+                query = query.filter(Place.popularity_score <= 40)
+
+        if filters.tags:
+            pass
+
+        total = query.count()
+        places = query.offset(filters.offset).limit(filters.limit).all()
 
         visited_ids = set()
         if user_id:
             visited_ids = set(self.visited_repo.get_visited_place_ids(user_id))
 
-        place_responses = []
-        for place in places:
-            place_response = PlaceResponse.model_validate(place)
-            place_response.is_visited = place.id in visited_ids
-            if hasattr(place, 'distance_km'):
-                place_response.distance_km = place.distance_km
-            place_responses.append(place_response)
-        has_more = (filters.offset + filters.limit) < total
+        results = []
+        for p in places:
+            res = PlaceResponse.model_validate(p)
+            res.is_visited = p.id in visited_ids
+            results.append(res)
 
         return PlaceListResponse(
-            places=place_responses,
+            places=results,
             total=total,
             limit=filters.limit,
             offset=filters.offset,
-            has_more=has_more
+            has_more=total > (filters.offset + filters.limit)
         )
 
     def update_place(self, place_id: UUID, place_data: PlaceUpdate) -> PlaceResponse:
@@ -99,39 +100,12 @@ class PlaceService:
         update_dict = place_data.model_dump(exclude_unset=True, exclude={'tags'})
         updated_place = self.place_repo.update(place, **update_dict)
         if place_data.tags is not None:
-            for tag in place.tags:
-                self.place_repo.remove_tag(place_id, tag.tag)
-            for tag in place_data.tags:
-                self.place_repo.add_tag(place_id, tag)
+            pass
 
         return PlaceResponse.model_validate(updated_place)
 
     def delete_place(self, place_id: UUID) -> None:
         place = self.place_repo.get_by_id(place_id)
         if not place:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Place not found"
-            )
+            raise HTTPException(status_code=404, detail="Place not found")
         self.place_repo.delete(place)
-
-    def get_all_places(self, limit: int = 100, offset: int = 0, user_id: Optional[UUID] = None) -> PlaceListResponse:
-        places, total = self.place_repo.get_all(limit=limit, offset=offset)
-        visited_ids = set()
-        if user_id:
-            visited_ids = set(self.visited_repo.get_visited_place_ids(user_id))
-
-        place_responses = []
-        for place in places:
-            place_response = PlaceResponse.model_validate(place)
-            place_response.is_visited = place.id in visited_ids
-            place_responses.append(place_response)
-        has_more = (offset + limit) < total
-
-        return PlaceListResponse(
-            places=place_responses,
-            total=total,
-            limit=limit,
-            offset=offset,
-            has_more=has_more
-        )

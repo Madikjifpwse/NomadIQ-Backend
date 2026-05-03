@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, Integer, Numeric, DateTime, Index
+from sqlalchemy import Column, String, Text, Integer, Numeric, DateTime, Index, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from datetime import datetime
@@ -22,6 +22,8 @@ class Place(Base):
     name = Column(String(255), nullable=False, index=True)
     description = Column(Text, nullable=True)
     category = Column(String(50), nullable=True, index=True)
+    place_type = Column(String(50), nullable=True, index=True, default="other")
+    rating = Column(Float, default=4.5)
     latitude = Column(Numeric(10, 8), nullable=False)
     longitude = Column(Numeric(11, 8), nullable=False)
     address = Column(Text, nullable=True)
